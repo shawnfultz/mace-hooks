@@ -1,0 +1,75 @@
+# eksctl configuration for mace-hooks-cluster
+# 100% dedicated EKS cluster sharing only VPC/NAT with n8n
+# Estimated cost: $118/month
+
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: mace-hooks-cluster
+  region: us-east-1
+  version: "1.32"
+
+# Use existing VPC (share with n8n-production-cluster)
+# Use existing subnets to avoid creating new NAT Gateways
+vpc:
+  id: vpc-08c5a7d3abaf3d956
+  subnets:
+    private:
+      us-east-1a:
+        id: subnet-09a60e6539ef5e731
+      us-east-1b:
+        id: subnet-05bd47fcedee8851a
+      us-east-1c:
+        id: subnet-02f2728047256d473
+    public:
+      us-east-1a:
+        id: subnet-0dbc5f9c23a488e54
+      us-east-1b:
+        id: subnet-0d9dddab14750f4bd
+      us-east-1c:
+        id: subnet-053418c00ede8b3c1
+
+# IAM OIDC provider (required for ALB controller, autoscaler)
+iam:
+  withOIDC: true
+
+# Managed node groups
+managedNodeGroups:
+  - name: hook0-nodes
+    instanceType: t3.small
+    desiredCapacity: 2
+    minSize: 2
+    maxSize: 4
+    volumeSize: 20
+    volumeType: gp3
+    privateNetworking: true
+    labels:
+      workload: hook0
+    tags:
+      Name: mace-hooks-cluster-node
+      Environment: production
+      Application: hook0
+      ManagedBy: eksctl
+    iam:
+      withAddonPolicies:
+        autoScaler: true
+        albIngress: true
+        ebs: true
+
+# CloudWatch logging
+cloudWatch:
+  clusterLogging:
+    enableTypes: ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+    logRetentionInDays: 7
+
+# Addons
+addons:
+  - name: vpc-cni
+    version: latest
+  - name: coredns
+    version: latest
+  - name: kube-proxy
+    version: latest
+  - name: aws-ebs-csi-driver
+    version: latest

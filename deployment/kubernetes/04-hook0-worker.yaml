@@ -1,0 +1,32 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hook0-worker
+  namespace: mace-hooks
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hook0-worker
+  template:
+    metadata:
+      labels:
+        app: hook0-worker
+    spec:
+      containers:
+        - name: worker
+          image: hook0/hook0-output-worker:latest
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: hook0-secrets
+                  key: DATABASE_URL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

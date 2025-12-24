@@ -1,0 +1,154 @@
+# Hook0 Production Deployment Values
+# Deployment: hooks2.maceinnovation.com
+# EKS Cluster: n8n-production-cluster (us-east-1)
+# Namespace: mace-hooks
+
+# Namespace for Hook0 components
+namespace: mace-hooks
+
+# API Service Configuration
+api:
+  name: api
+  replicaCount: 2
+  image:
+    repository: hook0/hook0-api
+    tag: latest
+    pullPolicy: Always
+  env:
+    APP_URL: "https://hooks2.maceinnovation.com"
+    CORS_ALLOWED_ORIGINS: "https://hooks2.maceinnovation.com"
+    DATABASE_URL: "postgres://hook0:CHANGE_ME@postgres.mace-hooks.svc.cluster.local:5432/hook0"
+    EMAIL_SENDER_ADDRESS: "noreply@maceinnovation.com"
+    IP: "0.0.0.0"
+    PORT: "8081"
+    SMTP_CONNECTION_URL: "smtp://localhost:1025"  # Using mailpit for now
+  service:
+    type: ClusterIP
+    port: 8081
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Output Worker Configuration
+outputWorker:
+  name: output-worker
+  replicaCount: 2
+  image:
+    repository: hook0/hook0-output-worker
+    tag: latest
+    pullPolicy: Always
+  env:
+    DATABASE_URL: "postgres://hook0:CHANGE_ME@postgres.mace-hooks.svc.cluster.local:5432/hook0"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Frontend Service Configuration
+frontend:
+  name: frontend
+  replicaCount: 2
+  image:
+    repository: hook0/hook0-frontend
+    tag: latest
+    pullPolicy: Always
+  env:
+    API_URL: "https://hooks2.maceinnovation.com"
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# PostgreSQL Service Configuration
+postgres:
+  name: postgres
+  replicaCount: 1
+  image:
+    repository: postgres
+    tag: "15"
+  env:
+    POSTGRES_DB: hook0
+    POSTGRES_USER: hook0
+    POSTGRES_PASSWORD: "CHANGE_ME"  # Will be set in secret
+  service:
+    type: ClusterIP
+    port: 5432
+  persistence:
+    enabled: true
+    claimName: postgres-data
+    size: 20Gi
+    storageClass: "gp3"  # AWS EBS gp3
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# Mailpit Configuration (for development/testing)
+mailpit:
+  enabled: true
+  name: mailpit
+  replicaCount: 1
+  image:
+    repository: axllent/mailpit
+    tag: latest
+  service:
+    type: ClusterIP
+    smtpPort: 1025
+    httpPort: 8025
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# Ingress Configuration (AWS ALB)
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-east-1:167427624811:certificate/dc44676c-0ecd-421e-a90b-4412b2faf668"
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '30'
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
+    alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: '3'
+    alb.ingress.kubernetes.io/success-codes: '200'
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=600
+  hosts:
+    - host: hooks2.maceinnovation.com
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: frontend
+              port: 80
+        - path: /api
+          pathType: Prefix
+          backend:
+            service:
+              name: api
+              port: 8081
